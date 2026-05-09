@@ -20,7 +20,7 @@ on:
       lookback:
         description: "Days to search back for a valid SEC master index"
         required: false
-        default: "7"
+        default: "2"
 
 env:
   DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
