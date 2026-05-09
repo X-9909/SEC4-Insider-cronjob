@@ -10,7 +10,7 @@ on:
       tickers:
         description: "Comma-separated list of stock tickers"
         required: false
-        default: "NVDA,AMZN,AAPL,GOOGL,SOFI,TEAM,CROX,V,STZ,DVA,OXY,CRM,SIEGY,DPZ,TRI,EL,DIS,WDFC,AXP,WM,ELV,MOH,KO,LVMUY,COST,PDD,MCO,RKLB"
+        default: "LITE,META,COHR,RKLB,AAOI,CRWV,IREN,NBIS,SNDK,HOOD,AMD,INTC,MU,OXY,AMZN,AAPL,GOOGL,RTX,ORCL,UNH,BRKB,MSFT,NVDA,PLTR,TSLA,TEAM,STX,AVGO,CRCL,COIN,NKE,SOFI,DVA"
 
       threshold:
         description: "Minimum trade size in USD"
