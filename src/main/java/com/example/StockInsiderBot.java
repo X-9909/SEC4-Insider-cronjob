@@ -11,9 +11,11 @@ import org.apache.hc.core5.http.HttpStatus;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -21,6 +23,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 public class StockInsiderBot {
 
@@ -203,38 +207,45 @@ public class StockInsiderBot {
             this.sharesOwnedAfter = sharesOwnedAfter;
         }
     }
-private static String buildGroupedNotification(Map<String, List<AlertEntry>> alertsByTicker,
-        String indexDate) {
     StringBuilder msg = new StringBuilder();
-    msg.append("🔔⏰ Insider Alerts (").append(indexDate).append(")\n\n");
     for (Map.Entry<String, List<AlertEntry>> entry : alertsByTicker.entrySet()) {
         String ticker = entry.getKey();
         List<AlertEntry> entries = entry.getValue();
-        msg.append("▪ **").append(ticker).append("**\n");
         for (AlertEntry e : entries) {
-            String planIcon = e.is10b51 ? " 🛡️[10b5-1]" : "";
             String date = e.transactionDate.isEmpty() ? "N/A" : e.transactionDate;
             String sharesStr = formatNumber(e.shares);
             String amountStr = formatAmount(e.amount);
             String positionStr = e.sharesOwnedAfter > 0 ? formatNumber(e.sharesOwnedAfter) : "N/A";
-            String actionIcon = e.type.equals("BUY") ? "📈" : "📉";
 
-            String line = String.format(
-                    "📅 %s 👤 %s | 💼 %s | %s %s%s | %s @ $%,.2f = %s | 持仓: %s",
-                    date, e.ownerName, e.position, actionIcon, e.type, planIcon,
-                    sharesStr, e.price, amountStr, positionStr);
-
-            if ("BUY".equals(e.type)) {
-                // 红色圆点 + diff 代码块（桌面端红色字体，手机端可见红色圆点）
-                msg.append("```diff\n- 🔴 ").append(line).append("\n```\n");
             } else {
-                msg.append("  ").append(line).append("\n");
             }
+
+            // 第一行
+            if (e.type.equals("BUY")) {
+                msg.append("🔴 ");
+            }
+            msg.append("**").append(ticker).append("** · ")
+               .append(actionIcon).append(" · **")
+               .append(amountStr).append("**\n");
+
+            // 第二行：日期 · 人名
+            msg.append("  ").append(date).append(" · ").append(e.ownerName).append("\n");
+
+            // 第三行：职位
+            msg.append("  ").append(e.position);
+            if (!planIcon.isEmpty()) {
+                msg.append(planIcon);
+            }
+            msg.append("\n");
+
+            // 第四行：股数 @ **股价** · 持仓
+            msg.append("  ").append(sharesStr).append(" @ **$")
+               .append(String.format("%,.2f", e.price))
+               .append("** · 持仓 ").append(positionStr).append("\n\n");
         }
-        msg.append("\n");
     }
+
     return msg.toString().trim();
-} private static String formatNumber(long num) {
         if (num >= 1_000_000)
             return String.format("%.1fM", num / 1_000_000.0);
         if (num >= 1_000)
@@ -562,28 +573,6 @@ private static String buildGroupedNotification(Map<String, List<AlertEntry>> ale
         } else
             logDebug("No non-derivativeTable for " + ticker);
 
-        JsonNode deriv = root.path("derivativeTable");
-        if (deriv.isMissingNode())
-            deriv = root.path("ownershipDocument").path("derivativeTable");
-        if (!deriv.isMissingNode()) {
-            JsonNode derivTrans = deriv.path("derivativeTransaction");
-            if (!derivTrans.isMissingNode()) {
-                if (derivTrans.isArray()) {
-                    for (JsonNode tx : derivTrans) {
-                        AlertEntry entry = processTransaction(tx, ownerName, position, minimumUsd);
-                        if (entry != null)
-                            alerts.computeIfAbsent(ticker, k -> new ArrayList<>()).add(entry);
-                    }
-                } else if (derivTrans.isObject()) {
-                    AlertEntry entry = processTransaction(derivTrans, ownerName, position, minimumUsd);
-                    if (entry != null)
-                        alerts.computeIfAbsent(ticker, k -> new ArrayList<>()).add(entry);
-                }
-            } else
-                logDebug("No derivativeTransaction for " + ticker);
-        } else
-            logDebug("No derivativeTable for " + ticker);
-
         alerts.putIfAbsent(ticker, new ArrayList<>());
         return alerts;
     }
@@ -640,13 +629,6 @@ private static String buildGroupedNotification(Map<String, List<AlertEntry>> ale
         if (!"P".equals(code) && !"S".equals(code)) {
             if (debugEnabled)
                 logDebug("Skipping transaction: code=" + code + " (not P/S)");
-            return null;
-        }
-
-        JsonNode exerciseDateNode = transaction.path("exerciseDate");
-        if (!exerciseDateNode.isMissingNode() && !exerciseDateNode.asText().isBlank()) {
-            if (debugEnabled)
-                logDebug("Skipping transaction: code=" + code + " has exerciseDate=" + exerciseDateNode.asText());
             return null;
         }
 
@@ -782,6 +764,12 @@ private static String buildGroupedNotification(Map<String, List<AlertEntry>> ale
     }
 
     private static boolean sendNotification(String message) {
+        String dingTalkUrl = System.getenv("DING_WEBHOOK_URL");
+        if (dingTalkUrl != null && !dingTalkUrl.isBlank()) {
+            String dingTalkSecret = System.getenv("DING_WEBHOOK_SIGN");
+            return sendDingTalkWebhook(dingTalkUrl, dingTalkSecret, "Insider Alert", message);
+        }
+
         String discordUrl = System.getenv("DISCORD_WEBHOOK_URL");
         if (discordUrl == null || discordUrl.isBlank())
             return false;
@@ -789,9 +777,59 @@ private static String buildGroupedNotification(Map<String, List<AlertEntry>> ale
     }
 
     private static void sendErrorNotification(String errorMessage) {
+        String dingTalkUrl = System.getenv("DING_WEBHOOK_URL");
+        if (dingTalkUrl != null && !dingTalkUrl.isBlank()) {
+            String dingTalkSecret = System.getenv("DING_WEBHOOK_SIGN");
+            sendDingTalkWebhook(dingTalkUrl, dingTalkSecret, "Insider Bot Error", errorMessage);
+            return;
+        }
+
         String discordUrl = System.getenv("DISCORD_WEBHOOK_URL");
         if (discordUrl != null && !discordUrl.isBlank())
             sendDiscordWebhook(discordUrl, "Insider Bot Error", errorMessage);
+    }
+
+    private static boolean sendDingTalkWebhook(String webhookUrl, String secret, String title, String message) {
+        try {
+            String signedUrl = buildDingTalkUrl(webhookUrl, secret);
+            String markdown = "### " + title + "\n\n" + message;
+            String payload = "{\"msgtype\":\"markdown\",\"markdown\":{\"title\":\"" + escapeJson(title)
+                    + "\",\"text\":\"" + escapeJson(markdown) + "\"}}";
+
+            HttpClient client = HttpClient.newBuilder().connectTimeout(HTTP_TIMEOUT).build();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(signedUrl))
+                    .timeout(HTTP_TIMEOUT)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(payload))
+                    .build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            String body = response.body() == null ? "" : response.body();
+            boolean success = response.statusCode() >= 200 && response.statusCode() < 300
+                    && body.replace(" ", "").contains("\"errcode\":0");
+            if (!success) {
+                System.err.println("Warning: DingTalk notification failed. status=" + response.statusCode()
+                        + " body=" + body);
+            }
+            return success;
+        } catch (Exception e) {
+            System.err.println("Warning: failed to send DingTalk notification: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private static String buildDingTalkUrl(String webhookUrl, String secret) throws Exception {
+        if (secret == null || secret.isBlank())
+            return webhookUrl;
+
+        long timestamp = System.currentTimeMillis();
+        String stringToSign = timestamp + "\n" + secret;
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        byte[] signData = mac.doFinal(stringToSign.getBytes(StandardCharsets.UTF_8));
+        String sign = URLEncoder.encode(Base64.getEncoder().encodeToString(signData), StandardCharsets.UTF_8);
+        String separator = webhookUrl.contains("?") ? "&" : "?";
+        return webhookUrl + separator + "timestamp=" + timestamp + "&sign=" + sign;
     }
 
     private static boolean sendDiscordWebhook(String webhookUrl, String title, String message) {

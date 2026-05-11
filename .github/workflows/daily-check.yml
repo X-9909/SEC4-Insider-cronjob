@@ -3,27 +3,27 @@ name: Daily Insider Check
 on:
   schedule:
     - cron: "0 16 * * *"
-      timezone: "Pacific/Auckland"
-
   workflow_dispatch:
     inputs:
       tickers:
-        description: "Comma-separated list of stock tickers"
+        description: "Comma-separated tickers (leave blank to use secret)"
         required: false
         default: "LITE,META,COHR,RKLB,AAOI,CRWV,IREN,NBIS,SNDK,HOOD,AMD,INTC,MU,OXY,AMZN,AAPL,GOOGL,RTX,ORCL,UNH,BRKB,MSFT,NVDA,PLTR,TSLA,TEAM,STX,AVGO,CRCL,COIN,NKE,SOFI,DVA"
 
       threshold:
-        description: "Minimum trade size in USD"
+        description: "Minimum trade size in USD (leave blank to use secret)"
         required: false
         default: "200000"
 
       lookback:
-        description: "Days to search back for a valid SEC master index"
+        description: "Days to look back (leave blank to use secret)"
         required: false
         default: "2"
 
 env:
   DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+  DING_WEBHOOK_URL: ${{ secrets.DING_WEBHOOK_URL }}
+  DING_WEBHOOK_SIGN: ${{ secrets.DING_WEBHOOK_SIGN }}
   SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
   SEC_CONTACT_EMAIL: ${{ secrets.SEC_CONTACT_EMAIL }}
 
@@ -32,11 +32,13 @@ env:
   THRESHOLD_USD: ${{ github.event.inputs.threshold || '200000' }}
 
   LOOKBACK_DAYS: ${{ github.event.inputs.lookback || '7' }}
+  TICKERS: ${{ github.event.inputs.tickers || secrets.TICKERS }}
+  THRESHOLD_USD: ${{ github.event.inputs.threshold || secrets.THRESHOLD }}
+  LOOKBACK_DAYS: ${{ github.event.inputs.lookback || secrets.LOOKBACK }}
 
 jobs:
   check:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -58,5 +60,4 @@ jobs:
 
       - name: Run bot
         run: |
-          mvn compile exec:java \
-          -Dexec.args="${{ env.TICKERS }} --threshold=${{ env.THRESHOLD_USD }} --lookback=${{ env.LOOKBACK_DAYS }}"
+          mvn compile exec:java -Dexec.args="${{ env.TICKERS }} --threshold=${{ env.THRESHOLD_USD }} --lookback=${{ env.LOOKBACK_DAYS }}"
