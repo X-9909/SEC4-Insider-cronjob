@@ -27,11 +27,6 @@ env:
   SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
   SEC_CONTACT_EMAIL: ${{ secrets.SEC_CONTACT_EMAIL }}
 
-  TICKERS: ${{ github.event.inputs.tickers || 'NVDA,AMZN,AAPL,GOOGL,SOFI,TEAM,CROX,V,STZ,DVA,OXY,CRM,SIEGY,DPZ,TRI,EL,DIS,WDFC,AXP,WM,ELV,MOH,KO,LVMUY,COST,PDD,MCO,RKLB' }}
-
-  THRESHOLD_USD: ${{ github.event.inputs.threshold || '200000' }}
-
-  LOOKBACK_DAYS: ${{ github.event.inputs.lookback || '7' }}
   TICKERS: ${{ github.event.inputs.tickers || secrets.TICKERS }}
   THRESHOLD_USD: ${{ github.event.inputs.threshold || secrets.THRESHOLD }}
   LOOKBACK_DAYS: ${{ github.event.inputs.lookback || secrets.LOOKBACK }}
