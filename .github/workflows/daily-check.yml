@@ -3,42 +3,73 @@ name: Daily Insider Check
 on:
   schedule:
     - cron: "0 16 * * *"
-      timezone: "Pacific/Auckland"
-
   workflow_dispatch:
     inputs:
       tickers:
-        description: "Comma-separated list of stock tickers"
+        description: "Comma-separated tickers (leave blank to use secret)"
         required: false
-        default: "LITE,META,COHR,RKLB,AAOI,CRWV,IREN,NBIS,SNDK,HOOD,AMD,INTC,MU,OXY,AMZN,AAPL,GOOGL,RTX,ORCL,UNH,BRKB,MSFT,NVDA,PLTR,TSLA,TEAM,STX,AVGO,CRCL,COIN,NKE,SOFI"
-
+        default: ""
       threshold:
-        description: "Minimum trade size in USD"
+        description: "Minimum trade size in USD (leave blank to use secret)"
         required: false
-        default: "200000"
-
+        default: ""
       lookback:
-        description: "Days to search back for a valid SEC master index"
+        description: "Days to look back (leave blank to use secret)"
         required: false
-        default: "2"
+        default: ""
+      update_config:
+        description: "Update cronjob default config? (saves provided values as secrets)"
+        type: boolean
+        required: false
+        default: false
 
 env:
   DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+  DING_WEBHOOK_URL: ${{ secrets.DING_WEBHOOK_URL }}
+  DING_WEBHOOK_SIGN: ${{ secrets.DING_WEBHOOK_SIGN }}
   SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
   SEC_CONTACT_EMAIL: ${{ secrets.SEC_CONTACT_EMAIL }}
-
-#  ,CROX,V,STZ,DVA,CRM,SIEGY,DPZ,TRI,EL,DIS,WDFC,AXP,WM,ELV,MOH,KO,LVMUY,COST,MCO'
-
-  TICKERS: ${{ github.event.inputs.tickers || 'LITE,META,COHR,RKLB,AAOI,CRWV,IREN,NBIS,SNDK,HOOD,AMD,INTC,MU,OXY,AMZN,AAPL,GOOGL,RTX,ORCL,UNH,BRKB,MSFT,NVDA,PLTR,TSLA,TEAM,STX,AVGO,CRCL,COIN,NKE,SOFI' }}
-
-  THRESHOLD_USD: ${{ github.event.inputs.threshold || '200000' }}
-
-  LOOKBACK_DAYS: ${{ github.event.inputs.lookback || '2' }}
+  # 逻辑完美：如果 input 有值就用 input，没有就回退用 secret，定时任务由于没有 input 也会自动用 secret
+  TICKERS: ${{ github.event.inputs.tickers || secrets.TICKERS }}
+  THRESHOLD_USD: ${{ github.event.inputs.threshold || secrets.THRESHOLD }}
+  LOOKBACK_DAYS: ${{ github.event.inputs.lookback || secrets.LOOKBACK }}
 
 jobs:
+  update-secrets:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.update_config == 'true'
+    steps:
+      - name: Update TICKERS secret
+        if: github.event.inputs.tickers != ''
+        uses: gliech/create-github-secret-action@v1
+        with:
+          name: TICKERS
+          value: ${{ github.event.inputs.tickers }}
+          pa_token: ${{ secrets.PAT }}
+
+      - name: Update THRESHOLD secret
+        if: github.event.inputs.threshold != ''
+        uses: gliech/create-github-secret-action@v1
+        with:
+          name: THRESHOLD
+          value: ${{ github.event.inputs.threshold }}
+          pa_token: ${{ secrets.PAT }}
+
+      - name: Update LOOKBACK secret
+        if: github.event.inputs.lookback != ''
+        uses: gliech/create-github-secret-action@v1
+        with:
+          name: LOOKBACK
+          value: ${{ github.event.inputs.lookback }}
+          pa_token: ${{ secrets.PAT }}
+
   check:
     runs-on: ubuntu-latest
-
+    needs: update-secrets
+    # 核心修复点：强制执行条件。
+    # 只有当 update-secrets 成功执行（success）或者被主动跳过（skipped）时，才运行 check。
+    # 如果 update-secrets 执行失败（failure），则此条件不满足，check 任务取消。
+    if: always() && (needs.update-secrets.result == 'success' || needs.update-secrets.result == 'skipped')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -60,5 +91,4 @@ jobs:
 
       - name: Run bot
         run: |
-          mvn compile exec:java \
-          -Dexec.args="${{ env.TICKERS }} --threshold=${{ env.THRESHOLD_USD }} --lookback=${{ env.LOOKBACK_DAYS }}"
+          mvn compile exec:java -Dexec.args="${{ env.TICKERS }} --threshold=${{ env.THRESHOLD_USD }} --lookback=${{ env.LOOKBACK_DAYS }}"

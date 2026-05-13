@@ -17,50 +17,37 @@ A simple Java bot that runs on GitHub Actions to check for large insider transac
    - Open your Discord server and go to `Server Settings` → `Integrations` → `Webhooks`.
    - Click `New Webhook` and select a channel where you want alerts to appear.
    - Copy the webhook URL.
-3. Add the webhook URL to GitHub secrets:
+3. Add the webhook URL to a new secret named `DISCORD_WEBHOOK_URL`
    - Open your fork on GitHub and go to `Settings` → `Secrets and variables` → `Actions`.
-   - Add a new secret named `DISCORD_WEBHOOK_URL`.
-   - Paste the webhook URL as the value.
-4. (Optional) Configure repo variables for cron defaults:
-   - In `Settings` → `Secrets and variables` → `Variables`, add:
-     - `TICKERS`: Comma-separated tickers, e.g. `AAPL,GOOGL,MSFT`
-     - `THRESHOLD_USD`: Minimum trade size, e.g. `500000`
-     - `LOOKBACK_DAYS`: Lookback days, e.g. `1`
-   - If not set, defaults are `AAPL,GOOGL`, `500000`, `1`.
-5. Run the workflow manually or wait for the daily schedule:
+4. Setup tickers, threshold and lookback days in secrets  
+   - Add a new secret named `TICKERS`.
+   - Add a new secret named `THRESHOLD`.
+   - Add a new secret named `LOOKBACK`.
+5. 钉钉通知（可选）：在 Settings → Secrets and variables → Actions 中设置
+   - `DING_WEBHOOK_URL`：钉钉机器人 Webhook 地址
+   - `DING_WEBHOOK_SIGN`：钉钉机器人加签密钥
+6. (Optional) Create a Personal Access Token (PAT) to enable updating cronjob defaults via workflow:
+   - Go to `Settings` → `Developer settings` → `Personal access tokens` → `Fine-grained tokens`.
+   - Click `Generate new token`, select your fork repository, and grant **Read and write** permission for **Secrets**.
+   - Copy the generated token and add it as a new secret named `PAT` in your repository's `Settings` → `Secrets and variables` → `Actions`.
+7. Run the workflow manually or wait for the daily schedule:
    - Go to the `Actions` tab, choose `Daily Insider Check`, then `Run workflow`.
    - Enter tickers, threshold, and lookback values as needed.
 
 ## Usage
 
 - **Manual run**: Go to Actions tab, select "Daily Insider Check", click "Run workflow", enter your desired tickers, threshold, and lookback days. Defaults are provided.
-- **Scheduled**: Runs daily automatically using repository variables if set, otherwise uses built-in defaults (`AAPL,GOOGL`, $500k, 1 day lookback).
+- **Scheduled**: Runs daily automatically using default values in `./.github/workflows/daily-check.yml`. You need to customise tickers, threshold and lookback to your preferences.
+- **Update default cronjob config**: Go to Actions tab, select "Daily Insider Check", click "Run workflow", fill in your desired tickers, threshold, and/or lookback values, then set `Update cronjob default config?` to `true`. This will save the provided values as repository secrets (`TICKERS`, `THRESHOLD`, `LOOKBACK`), so that future scheduled runs automatically pick them up. You only need to fill in the fields you want to change — blank fields are ignored and won't overwrite existing secrets. **Requires the `PAT` secret to be set up first** (see Setup step 6).
 - **Configuration**: 
-  - **Repository Variables** (for cron job defaults): Set `TICKERS`, `THRESHOLD_USD`, `LOOKBACK_DAYS` in repo Settings → Variables
   - **GitHub secret**: Set `DISCORD_WEBHOOK_URL` in Settings → Secrets and variables → Actions
-  - **CLI options**: For local testing or custom runs
+  - **钉钉通知（可选）**：在 Settings → Secrets and variables → Actions 中设置 `DING_WEBHOOK_URL`：钉钉机器人 Webhook 地址 `DING_WEBHOOK_SIGN`：钉钉机器人加签密钥
   - **Ticker format**: `BRKB` or `BRK-B` are supported; `BRK.B` is not supported. Ticker input is case-insensitive.
 
-### Example local CLI commands
-
-```bash
-mvn exec:java -Dexec.args="--tickers=AAPL,GOOGL,MSFT --threshold=500000 --lookback=7"
-```
-
-```bash
-mvn exec:java -Dexec.args="AAPL,GOOGL,MSFT --threshold=1000000 --lookback=3"
-```
-
-```bash
-mvn exec:java -Dexec.args="--tickers=ZTS --threshold=500000 --lookback=1 --mock=true"
-```
-
-- If `DISCORD_WEBHOOK_URL` is not set, the bot logs alerts to the Actions console instead of failing.
 - Push notifications include ticker, owner, position, action, security, shares, price, and amount on separate lines.
-
+![alt text](image.png)
 ## Requirements
 
-- Java 21
 - Maven
 - GitHub Actions
 
