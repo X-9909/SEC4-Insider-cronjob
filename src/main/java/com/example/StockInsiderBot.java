@@ -207,37 +207,18 @@ public class StockInsiderBot {
             this.sharesOwnedAfter = sharesOwnedAfter;
         }
     }
-
-   private static String buildGroupedNotification(Map<String, List<AlertEntry>> alertsByTicker, String indexDate) {
+    /*
     StringBuilder msg = new StringBuilder();
-    msg.append("⏰ Insider Alerts (").append(indexDate).append(")\n\n");
-
-    boolean isFirstTicker = true;
     for (Map.Entry<String, List<AlertEntry>> entry : alertsByTicker.entrySet()) {
         String ticker = entry.getKey();
         List<AlertEntry> entries = entry.getValue();
-
-        // 不是第一个 ticker 时，上一个 ticker 结束后加分隔线
-        if (!isFirstTicker) {
-            msg.append("─────────────────────────────────\n\n");
-        }
-        isFirstTicker = false;
-
-        boolean isFirstRecord = true;
         for (AlertEntry e : entries) {
-            // 同一个 ticker 下的不同记录之间不加分隔线，仅留空行
-
-            String planIcon = e.is10b51 ? " 🏷️[10b5-1]" : "";
             String date = e.transactionDate.isEmpty() ? "N/A" : e.transactionDate;
             String sharesStr = formatNumber(e.shares);
             String amountStr = formatAmount(e.amount);
             String positionStr = e.sharesOwnedAfter > 0 ? formatNumber(e.sharesOwnedAfter) : "N/A";
 
-            String actionIcon;
-            if (e.type.equals("BUY")) {
-                actionIcon = "📈 BUY";
             } else {
-                actionIcon = "📉 SELL";
             }
 
             // 第一行
@@ -266,7 +247,67 @@ public class StockInsiderBot {
     }
 
     return msg.toString().trim();
-}
+        if (num >= 1_000_000)
+            return String.format("%.1fM", num / 1_000_000.0);
+        if (num >= 1_000)
+            return String.format("%.1fK", num / 1_000.0);
+        return Long.toString(num);
+    }
+
+    */
+
+    private static String buildGroupedNotification(Map<String, List<AlertEntry>> alertsByTicker, String indexDate) {
+        StringBuilder msg = new StringBuilder();
+        msg.append("⏰ Insider Alerts (").append(indexDate).append(")\n\n");
+
+        boolean isFirstTicker = true;
+        for (Map.Entry<String, List<AlertEntry>> entry : alertsByTicker.entrySet()) {
+            String ticker = entry.getKey();
+            List<AlertEntry> entries = entry.getValue();
+
+            if (!isFirstTicker) {
+                msg.append("─────────────────────────────────\n\n");
+            }
+            isFirstTicker = false;
+
+            for (AlertEntry e : entries) {
+                String planIcon = e.is10b51 ? " 🏷️[10b5-1]" : "";
+                String date = e.transactionDate.isEmpty() ? "N/A" : e.transactionDate;
+                String sharesStr = formatNumber(e.shares);
+                String amountStr = formatAmount(e.amount);
+                String positionStr = e.sharesOwnedAfter > 0 ? formatNumber(e.sharesOwnedAfter) : "N/A";
+
+                String actionIcon;
+                if (e.type.equals("BUY")) {
+                    actionIcon = "📈 BUY";
+                } else {
+                    actionIcon = "📉 SELL";
+                }
+
+                if (e.type.equals("BUY")) {
+                    msg.append("🔴 ");
+                }
+                msg.append("**").append(ticker).append("** · ")
+                        .append(actionIcon).append(" · **")
+                        .append(amountStr).append("**\n");
+
+                msg.append("  ").append(date).append(" · ").append(e.ownerName).append("\n");
+
+                msg.append("  ").append(e.position);
+                if (!planIcon.isEmpty()) {
+                    msg.append(planIcon);
+                }
+                msg.append("\n");
+
+                msg.append("  ").append(sharesStr).append(" @ **$")
+                        .append(String.format("%,.2f", e.price))
+                        .append("** · 持仓 ").append(positionStr).append("\n\n");
+            }
+        }
+
+        return msg.toString().trim();
+    }
+
     private static String formatNumber(long num) {
         if (num >= 1_000_000)
             return String.format("%.1fM", num / 1_000_000.0);
